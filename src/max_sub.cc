@@ -1,8 +1,9 @@
 #include <iostream>
 #include <vector>
+#define CATCH_CONFIG_MAIN
+#include <catch.h>
 
 using namespace std;
-
 
 int max_sub_sum(const vector<int> &a) {
   int max = 0;
@@ -36,13 +37,9 @@ int max_sub_sum2(const vector<int> &a) {
   return max;
 }
 
-int main(int argc, char const *argv[]) {
-  // -2, 11, -4, 13, -5, -2
-  // => max sub sum = 20
+// -2, 11, -4, 13, -5, -2
+
+TEST_CASE( "max subsequence sum", "[max_sub_sum]" ) {
   std::vector<int> v { -2, 11, -4, 13, -5, -2 };
-
-  int sum = max_sub_sum(v);
-  cout << sum << endl;
-
-  return 0;
+  REQUIRE(max_sub_sum(v) == 20);
 }

@@ -14,7 +14,8 @@ notifications:
     on_failure: always
     on_start: always
 
-# script:
-#   - make
+script:
+  - make
+  - make test
 
 os: osx
