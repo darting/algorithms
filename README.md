@@ -2,3 +2,9 @@
 [![Build Status](https://travis-ci.org/games/algorithms.svg)](https://travis-ci.org/games/algorithms)
 
 ### data structures and algorithms
+
+```
+cmake .
+make
+make test
+```
