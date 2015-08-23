@@ -87,22 +87,22 @@ int max_sub_sum4(const vector<int> &a) {
 // -2, 11, -4, 13, -5, -2 => 20
 // 4, -3, 5, -2, -1, 2, 6, -2 => 11
 
-TEST_CASE( "max subsequence sum O(N^3)", "[max_sub_sum]" ) {
+TEST_CASE( "max subsequence sum O" ) {
   REQUIRE(max_sub_sum({ -2, 11, -4, 13, -5, -2 }) == 20);
   REQUIRE(max_sub_sum({ 4, -3, 5, -2, -1, 2, 6, -2 }) == 11);
 }
 
-TEST_CASE( "max subsequence sum 2 O(N^2)", "[max_sub_sum2]" ) {
+TEST_CASE( "max subsequence sum 2" ) {
   REQUIRE(max_sub_sum2({ -2, 11, -4, 13, -5, -2 }) == 20);
   REQUIRE(max_sub_sum2({ 4, -3, 5, -2, -1, 2, 6, -2 }) == 11);
 }
 
-TEST_CASE( "max subsequence sum 3", "[max_sub_sum3]" ) {
+TEST_CASE( "max subsequence sum 3" ) {
   REQUIRE(max_sub_sum3({ -2, 11, -4, 13, -5, -2 }) == 20);
   REQUIRE(max_sub_sum3({ 4, -3, 5, -2, -1, 2, 6, -2 }) == 11);
 }
 
-TEST_CASE( "max subsequence sum 4", "[max_sub_sum4]" ) {
+TEST_CASE( "max subsequence sum 4" ) {
   REQUIRE(max_sub_sum4({ -2, 11, -4, 13, -5, -2 }) == 20);
   REQUIRE(max_sub_sum4({ 4, -3, 5, -2, -1, 2, 6, -2 }) == 11);
 }

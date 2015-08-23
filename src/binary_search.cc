@@ -40,7 +40,7 @@ int binary_search2(const vector<int> &a, const int &x) {
   return -1;
 }
 
-TEST_CASE( "binary search", "[binary search]" ) {
+TEST_CASE( "binary search" ) {
   REQUIRE(binary_search({ 1, 2, 3, 4, 5, 6 }, 2) == 1);
   REQUIRE(binary_search({ 1, 2, 3, 4, 5, 6 }, 1) == 0);
   REQUIRE(binary_search({ 1, 2, 3, 4, 5, 6 }, 5) == 4);
@@ -49,7 +49,7 @@ TEST_CASE( "binary search", "[binary search]" ) {
   REQUIRE(binary_search({ 1, 2, 3, 4, 5, 6 }, 7) == -1);
 }
 
-TEST_CASE( "binary search 2", "[binary search 2]" ) {
+TEST_CASE( "binary search 2" ) {
   REQUIRE(binary_search2({ 1, 2, 3, 4, 5, 6 }, 2) == 1);
   REQUIRE(binary_search2({ 1, 2, 3, 4, 5, 6 }, 1) == 0);
   REQUIRE(binary_search2({ 1, 2, 3, 4, 5, 6 }, 5) == 4);
