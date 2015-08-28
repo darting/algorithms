@@ -1,4 +1,6 @@
 #include <iostream>
+#include <memory>
+#include <random>
 
 #define CATCH_CONFIG_MAIN
 #include <catch.hpp>
@@ -8,100 +10,96 @@ using namespace std;
 
 template<typename Comparable>
 class BinarySearchTree {
-
-public:
-
-  BinarySearchTree() : root_(nullptr) {}
-
-  ~BinarySearchTree();
-
-  const Comparable &min() const {
-    return min(root_);
-  }
   
-  const Comparable &max() const {
-    return max(root_);
+public:
+  typedef Comparable ValueType;
+
+  BinarySearchTree() {}
+
+  void Insert(const ValueType &value) {
+    Insert(value, root_, 0);
   }
 
-  bool contains(const Comparable &x) const {
-    return contains(x, root_);
+  void Remove(const ValueType &value) {
+    Remove(value, root_);
   }
 
-  bool is_empty() const { return root_ == nullptr; }
-
-  void print() const {}
-
-  void insert(const Comparable &x) {
-    insert(x, root_);
+  void Print() {
+    Print(root_);
   }
 
-  void remove(const Comparable &x) {
-
+  void Print2() {
+    Print2(root_);
   }
 
 private:
-  
-  struct BinaryNode {
-    Comparable element;
-    BinaryNode *left;
-    BinaryNode *right;
-    BinaryNode(const Comparable &e, BinaryNode *l, BinaryNode *r) 
-      : element(e),
-        left(l),
-        right(r) {}
+  struct TreeNode {
+    ValueType value;
+    int deep;
+    unique_ptr<TreeNode> left;
+    unique_ptr<TreeNode> right;
+    TreeNode(const ValueType &v, const int d)
+    : value(v),
+      deep(d),
+      left(nullptr),
+      right(nullptr) {}
   };
 
-  BinaryNode *root_;
+  unique_ptr<TreeNode> root_;
 
-  const Comparable &min(BinaryNode *root) const {
-    if (root == nullptr) {
-      return nullptr;
-    }
-    if (root->left == nullptr) {
-      return root;
-    }
-    return min(root->left);
-  } 
-
-  const Comparable &max(BinaryNode *root) const {
-    if (root == nullptr) return nullptr;
-    if (root->right == nullptr) return root;
-    return max(root->right);
-  }
-
-  bool contains(const Comparable &x, BinaryNode *root) const {
-    if (root == nullptr) {
-      return false;
-    } else if (x < root->element) {
-      return contains(x, root->left);
-    } else if (x > root->element) {
-      return contains(x, root->right);
-    } else {
-      return true;
+  void Insert(const ValueType &value, unique_ptr<TreeNode> &node, const int &deep) {
+    if (!node) {
+      node = make_unique<TreeNode>(value, deep);
+    } else if (value < node->value) {
+      Insert(value, node->left, deep + 1);
+    } else if (value > node->value) {
+      Insert(value, node->right, deep + 1);
     }
   }
 
-  void insert(const Comparable &x, BinaryNode *root) {
-    if (root != nullptr) {
-      if (x < root->element) {
-        if (root->left == nullptr) {
-          root->left = new BinaryNode(x, nullptr, nullptr);
-        } else {
-          insert(x, root->left);
-        }
-      } else if (x > root->element) {
-        if (root->right == nullptr) {
-          root->right = new BinaryNode(x, nullptr, nullptr);
-        } else {
-          insert(x, root->right);
-        }
-      }
+  void Remove(const ValueType &value, const unique_ptr<TreeNode> &node) {
+
+  }
+
+  void Print(const unique_ptr<TreeNode> &node) {
+    if (!node) return;
+
+    for (int i = 0; i < node->deep; ++i) {
+      auto end = i == node->deep - 1;
+      auto c = i == 0 ? (end ? "┠ " : "┠") : (end ? "─ " : "─");
+      cout << c;
     }
+    cout << node->value << endl;
+
+    Print(node->left);
+    Print(node->right);
+  }
+
+  void Print2(const unique_ptr<TreeNode> &node) {
+    if (!node) return;
+
+    Print2(node->left);
+    cout << node->value << " ";
+    Print2(node->right);
   }
 
 };
 
 
+TEST_CASE( "Print" ) {
+  random_device rd;
+  mt19937 gen(rd());
+  int max = 10;
+  uniform_int_distribution<> dist(1, max);
+  BinarySearchTree<int> tree;
+  for (int i = 0; i < max; ++i) {
+    tree.Insert(dist(gen));
+  }
+  tree.Print();
+  cout << endl;
+  tree.Print2();
+  cout << endl;
+}
 
 
 
