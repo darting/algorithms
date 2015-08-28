@@ -8,9 +8,15 @@
 using namespace std;
 
 
+// http://herbsutter.com/gotw/_102/
+template<typename T, typename ...Args>
+std::unique_ptr<T> make_unique1( Args&& ...args ) {
+    return std::unique_ptr<T>( new T( std::forward<Args>(args)... ) );
+}
+
 template<typename Comparable>
 class BinarySearchTree {
-  
+
 public:
   typedef Comparable ValueType;
 
@@ -49,7 +55,7 @@ private:
 
   void Insert(const ValueType &value, unique_ptr<TreeNode> &node, const int &deep) {
     if (!node) {
-      node = make_unique<TreeNode>(value, deep);
+      node = make_unique1<TreeNode>(value, deep);
     } else if (value < node->value) {
       Insert(value, node->left, deep + 1);
     } else if (value > node->value) {
