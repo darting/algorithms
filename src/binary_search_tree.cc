@@ -46,6 +46,14 @@ public:
     Remove(value, root_);
   }
 
+  void Reset() {
+    root_.reset();
+  }
+
+  const unique_ptr<Node> &FindMin() const {
+    return FindMin(root_);
+  }
+
   const unique_ptr<Node> &root() const {
     return root_;
   }
@@ -72,8 +80,30 @@ private:
     }
   }
 
-  void Remove(const ValueType &value, const unique_ptr<Node> &node) {
+  void Remove(const ValueType &value, unique_ptr<Node> &node) {
+    if (!node) return;
 
+    if (value < node->value) {
+      Remove(value, node->left);
+    } else if (value > node->value) {
+      Remove(value, node->right);
+    } else if (node->left && node->right) {
+      node->value = FindMin(node->right)->value;
+      Remove(node->value, node->right); 
+    } else if (node->left) {
+      node = move(node->left);
+    } else if (node->right) {
+      node = move(node->right);
+    } else {
+      node.reset();
+    }
+  }
+
+  const unique_ptr<Node> &FindMin(const unique_ptr<Node> &node) const {
+    if (node->left) {
+      return FindMin(node->left);
+    }
+    return node;
   }
 
   void Print(const unique_ptr<Node> &node) {
@@ -127,13 +157,79 @@ TEST_CASE("Insert") {
   tree.Insert(6);
   tree.Insert(3);
   tree.Insert(1);
-  
+
   REQUIRE(tree.root()->value == 5);
   REQUIRE(tree.root()->left->value == 2);
   REQUIRE(tree.root()->left->left->value == 1);
   REQUIRE(tree.root()->left->right->value == 3);
   REQUIRE(tree.root()->right->value == 8);
   REQUIRE(tree.root()->right->left->value == 6);
+}
+
+TEST_CASE("find min") {
+  random_device rd;
+  mt19937 gen(rd());
+  int max = 100;
+  uniform_int_distribution<> dist(1, max);
+  BinarySearchTree<int> tree;
+  int min = max;
+  for (int i = 0; i < max; ++i) {
+    int tmp = dist(gen);
+    if (min > tmp) {
+      min = tmp;
+    }
+    tree.Insert(tmp);
+  }
+
+  REQUIRE(tree.FindMin()->value == min);
+}
+
+TEST_CASE("Remove") {
+  //        5 
+  //      /   \
+  //     2     8
+  //    / \   /  
+  //   1   3 6    
+  BinarySearchTree<int> tree;
+  tree.Insert(5);
+  tree.Insert(2);
+  tree.Insert(8);
+  tree.Insert(6);
+  tree.Insert(3);
+  tree.Insert(1);
+
+  //        5 
+  //      /   \
+  //     3     8
+  //    /     /  
+  //   1     6  
+  tree.Remove(2);
+  REQUIRE(tree.root()->value == 5);
+  REQUIRE(tree.root()->left->value == 3);
+  REQUIRE(tree.root()->left->left->value == 1);
+  REQUIRE(!tree.root()->left->right);
+
+  /*
+  //        5             5 
+  //      /   \         /   \
+  //     2     8 ->    2     6
+  //    / \   /         \     
+  //   1   3 6           3  
+  */
+  tree.Reset();
+  tree.Insert(5);
+  tree.Insert(2);
+  tree.Insert(8);
+  tree.Insert(6);
+  tree.Insert(3);
+  tree.Insert(1);
+  tree.Remove(8);
+  tree.Remove(1);
+  REQUIRE(tree.root()->right->value == 6);
+  REQUIRE(!tree.root()->right->left);
+  REQUIRE(!tree.root()->right->right);
+  REQUIRE(tree.root()->left->right->value == 3);
+  REQUIRE(!tree.root()->left->left);
 }
 
 
