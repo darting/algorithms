@@ -71,11 +71,9 @@ private:
     if (!node) return;
 
     for (int i = 0; i < node->deep; ++i) {
-      auto end = i == node->deep - 1;
-      auto c = i == 0 ? (end ? "┠ " : "┠") : (end ? "─ " : "─");
-      cout << c;
+      cout << (i == 0 ? "┠" : "─");
     }
-    cout << node->value << endl;
+    cout << " " << node->value << endl;
 
     Print(node->left);
     Print(node->right);
