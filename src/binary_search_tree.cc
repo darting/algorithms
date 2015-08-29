@@ -14,11 +14,27 @@ std::unique_ptr<T> make_unique1( Args&& ...args ) {
     return std::unique_ptr<T>( new T( std::forward<Args>(args)... ) );
 }
 
+
+template<typename ValueType>
+struct TreeNode {
+  ValueType value;
+  int deep;
+  unique_ptr<TreeNode> left;
+  unique_ptr<TreeNode> right;
+  TreeNode(const ValueType &v, const int d)
+  : value(v),
+    deep(d),
+    left(nullptr),
+    right(nullptr) {}
+};
+
+
 template<typename Comparable>
 class BinarySearchTree {
 
 public:
   typedef Comparable ValueType;
+  typedef TreeNode<ValueType> Node;
 
   BinarySearchTree() {}
 
@@ -30,6 +46,10 @@ public:
     Remove(value, root_);
   }
 
+  const unique_ptr<Node> &root() const {
+    return root_;
+  }
+
   void Print() {
     Print(root_);
   }
@@ -39,23 +59,12 @@ public:
   }
 
 private:
-  struct TreeNode {
-    ValueType value;
-    int deep;
-    unique_ptr<TreeNode> left;
-    unique_ptr<TreeNode> right;
-    TreeNode(const ValueType &v, const int d)
-    : value(v),
-      deep(d),
-      left(nullptr),
-      right(nullptr) {}
-  };
 
-  unique_ptr<TreeNode> root_;
+  unique_ptr<Node> root_;
 
-  void Insert(const ValueType &value, unique_ptr<TreeNode> &node, const int &deep) {
+  void Insert(const ValueType &value, unique_ptr<Node> &node, const int &deep) {
     if (!node) {
-      node = make_unique1<TreeNode>(value, deep);
+      node = make_unique1<Node>(value, deep);
     } else if (value < node->value) {
       Insert(value, node->left, deep + 1);
     } else if (value > node->value) {
@@ -63,11 +72,11 @@ private:
     }
   }
 
-  void Remove(const ValueType &value, const unique_ptr<TreeNode> &node) {
+  void Remove(const ValueType &value, const unique_ptr<Node> &node) {
 
   }
 
-  void Print(const unique_ptr<TreeNode> &node) {
+  void Print(const unique_ptr<Node> &node) {
     if (!node) return;
 
     for (int i = 0; i < node->deep; ++i) {
@@ -79,7 +88,7 @@ private:
     Print(node->right);
   }
 
-  void Print2(const unique_ptr<TreeNode> &node) {
+  void Print2(const unique_ptr<Node> &node) {
     if (!node) return;
 
     Print2(node->left);
@@ -103,6 +112,28 @@ TEST_CASE( "Print" ) {
   cout << endl;
   tree.Print2();
   cout << endl;
+}
+
+TEST_CASE("Insert") {
+  //        5 
+  //      /   \
+  //     2     8
+  //    / \   /  
+  //   1   3 6    
+  BinarySearchTree<int> tree;
+  tree.Insert(5);
+  tree.Insert(2);
+  tree.Insert(8);
+  tree.Insert(6);
+  tree.Insert(3);
+  tree.Insert(1);
+  
+  REQUIRE(tree.root()->value == 5);
+  REQUIRE(tree.root()->left->value == 2);
+  REQUIRE(tree.root()->left->left->value == 1);
+  REQUIRE(tree.root()->left->right->value == 3);
+  REQUIRE(tree.root()->right->value == 8);
+  REQUIRE(tree.root()->right->left->value == 6);
 }
 
 
