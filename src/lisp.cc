@@ -2,6 +2,7 @@
 #include <string>
 #include <queue>
 #include <vector>
+#include <unordered_map>
 #include <stdexcept>
 
 #define CATCH_CONFIG_MAIN
@@ -12,33 +13,125 @@ using namespace std;
 enum class NodeType {
   number,
   symbol,
-  list
+  list,
+  procedure
 };
 
-struct Node {
+class Node {
+public:
+  typedef shared_ptr<Node> Ptr;
   NodeType type;
 };
 
-struct Number : Node {
+class Number : public Node {
+public:
   double value;
   Number(const double &v) : value(v) {
     type = NodeType::number;
   }
 };
 
-struct Symbol : Node {
+class Symbol : public Node {
+public:
   string value;
   Symbol(const string &s) : value(s) {
     type = NodeType::symbol;
   }
 };
 
-struct List : Node {
+class List : public Node {
+public:
   vector<shared_ptr<Node>> children;
   List() {
     type = NodeType::list;
   }
 };
+
+class Env {
+public:
+  typedef shared_ptr<Env> Ptr;
+  typedef string KeyType;
+  typedef Node::Ptr ValueType;
+  typedef unordered_map<KeyType, ValueType> ValuesType;
+private:
+  Ptr outer_;
+  ValuesType values_;
+
+public:
+  Env(Ptr outer = nullptr) : outer_(outer) {}
+  
+  ValueType Find(const KeyType &key) const {
+    auto it = values_.find(key);
+    if (it == values_.end()) {
+      if (outer_) {
+        return outer_->Find(key);
+      } else {
+        return nullptr;
+      }
+    }
+    return it->second;
+  }
+  
+  bool Emplace(const KeyType &key, ValueType node) {
+    return values_.emplace(key, node).second;
+  }
+};
+
+Node::Ptr eval(Node::Ptr x, Env::Ptr env);
+
+class Procedure : public Node {
+private:
+  vector<Node::Ptr> parms_;
+  Node::Ptr body_;
+  Env::Ptr env_;
+public:
+  Procedure(const vector<Node::Ptr> &parms, Node::Ptr body, Env::Ptr env)
+  : parms_(parms),
+    body_(body),
+    env_(env) {
+      type = NodeType::procedure;
+    }
+  Node::Ptr operator()(vector<Node::Ptr> args) {
+    Env::Ptr env = make_shared<Env>(env_);
+    for (size_t i = 0; i < parms_.size(); ++i) {
+      auto k = static_cast<const Symbol*>(parms_[i].get())->value;
+      env->Emplace(k, args[i]);
+    }
+    return eval(body_, env);
+  }
+};
+
+Node::Ptr eval(Node::Ptr x, Env::Ptr env) {
+  if (x->type == NodeType::symbol) {
+    auto symbol = static_cast<const Symbol*>(x.get());
+    return env->Find(symbol->value);
+  } else if (x->type == NodeType::number) {
+    return x;
+  } else if (x->type == NodeType::list) {
+    auto list = static_cast<const List*>(x.get());
+    auto children = list->children;
+    if (children.size() == 0) {
+      return x;
+    }
+    auto first = static_cast<const Symbol*>(children[0].get());
+    if (first->value == "quote") {
+      return children[1];
+    } else if (first->value == "if") {
+      // TODO
+    } else if (first->value == "define") {
+      auto var = static_cast<const Symbol*>(children[1].get());
+      auto exp = children[2];
+      env->Emplace(var->value, eval(exp, env));
+    } else if (first->value == "set!") {
+      // TODO
+    } else if (first->value == "lambda") {
+      // TODO
+    }
+  } else if (x->type == NodeType::procedure) {
+    // TODO
+  }
+  return x;
+}
 
 
 queue<string> tokenize(string program) {
@@ -147,6 +240,10 @@ TEST_CASE("parse") {
   printTree(tree, 0);
 }
 
+TEST_CASE("eval") {
+  auto tokens = tokenize("1");
+  auto tree = parse(tokens);
+}
 
 
 
