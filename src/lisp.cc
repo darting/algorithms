@@ -4,6 +4,7 @@
 #include <vector>
 #include <unordered_map>
 #include <stdexcept>
+#include <functional>
 
 #define CATCH_CONFIG_MAIN
 #include <catch.hpp>
@@ -14,7 +15,9 @@ enum class NodeType {
   number,
   symbol,
   list,
-  procedure
+  boolean,
+  procedure,
+  func
 };
 
 class Node {
@@ -44,6 +47,86 @@ public:
   vector<shared_ptr<Node>> children;
   List() {
     type = NodeType::list;
+  }
+};
+
+class Boolean : public Node {
+public:
+  Boolean() {
+    type = NodeType::boolean;
+  }
+public:
+  static const Node::Ptr True;
+  static const Node::Ptr False;
+};
+
+const Node::Ptr Boolean::True = make_shared<Boolean>();
+const Node::Ptr Boolean::False = make_shared<Boolean>();
+
+class Func : public Node {
+public:
+  Func() {
+    type = NodeType::func;
+  }
+  virtual ~Func() {}
+  virtual Node::Ptr call(vector<Node::Ptr> args) = 0;
+};
+
+// class Op : public Node {
+// public:
+//   typedef function<Node::Ptr(const vector<Node::Ptr>&)> FuncType;
+// private:
+//   FuncType func_;
+// public:
+//   Op(FuncType f) : func_(f) {}
+//   Node::Ptr call(const vector<Node::Ptr> &args) {
+//     return func_(args);
+//   }
+// };
+
+// template<typename T>
+// Node::Ptr Add1(const vector<Node::Ptr> &args) {
+//   return nullptr;
+// }
+
+// template<typename T>
+// Node::Ptr Add1(const vector<Node::Ptr> &args) {
+//   return nullptr;
+// }
+
+class Add : public Func {
+public:
+  Node::Ptr call(vector<Node::Ptr> args) override {
+    auto l = static_cast<const Number*>(args[0].get())->value;
+    auto r = static_cast<const Number*>(args[1].get())->value;
+    return make_shared<Number>(l + r);
+  }
+};
+
+class Subtract : public Func {
+public:
+  Node::Ptr call(vector<Node::Ptr> args) override {
+    auto l = static_cast<const Number*>(args[0].get())->value;
+    auto r = static_cast<const Number*>(args[1].get())->value;
+    return make_shared<Number>(l - r);
+  }
+};
+
+class Multiply : public Func {
+public:
+  Node::Ptr call(vector<Node::Ptr> args) override {
+    auto l = static_cast<const Number*>(args[0].get())->value;
+    auto r = static_cast<const Number*>(args[1].get())->value;
+    return make_shared<Number>(l * r);
+  }
+};
+
+class Divide : public Func {
+public:
+  Node::Ptr call(vector<Node::Ptr> args) override {
+    auto l = static_cast<const Number*>(args[0].get())->value;
+    auto r = static_cast<const Number*>(args[1].get())->value;
+    return make_shared<Number>(l / r);
   }
 };
 
@@ -77,6 +160,16 @@ public:
   }
 };
 
+Env::Ptr standardEnv() {
+  Env::Ptr env = make_shared<Env>();
+  env->Emplace("+", make_shared<Add>());
+  env->Emplace("-", make_shared<Subtract>());
+  env->Emplace("*", make_shared<Multiply>());
+  env->Emplace("/", make_shared<Divide>());
+  return env;
+}
+
+
 Node::Ptr eval(Node::Ptr x, Env::Ptr env);
 
 class Procedure : public Node {
@@ -91,7 +184,7 @@ public:
     env_(env) {
       type = NodeType::procedure;
     }
-  Node::Ptr operator()(vector<Node::Ptr> args) {
+  Node::Ptr call(vector<Node::Ptr> args) {
     Env::Ptr env = make_shared<Env>(env_);
     for (size_t i = 0; i < parms_.size(); ++i) {
       auto k = static_cast<const Symbol*>(parms_[i].get())->value;
@@ -117,7 +210,14 @@ Node::Ptr eval(Node::Ptr x, Env::Ptr env) {
     if (first->value == "quote") {
       return children[1];
     } else if (first->value == "if") {
-      // TODO
+      auto test = children[1];
+      auto conseq = children[2];
+      auto alt = children[3];
+      if (eval(test, env) == Boolean::True) {
+        return eval(conseq, env);
+      } else {
+        return eval(alt, env);
+      }
     } else if (first->value == "define") {
       auto var = static_cast<const Symbol*>(children[1].get());
       auto exp = children[2];
@@ -126,6 +226,13 @@ Node::Ptr eval(Node::Ptr x, Env::Ptr env) {
       // TODO
     } else if (first->value == "lambda") {
       // TODO
+    } else {
+      auto func = static_cast<Func*>(eval(children[0], env).get());
+      vector<Node::Ptr> args;
+      for (auto start = children.begin() + 1; start != children.end(); ++start) {
+        args.push_back(eval(*start, env));
+      }
+      return func->call(args);
     }
   } else if (x->type == NodeType::procedure) {
     // TODO
@@ -186,7 +293,7 @@ shared_ptr<Node> parse(queue<string> &tokens) {
 }
 
 
-void printTree(const shared_ptr<Node> &node, const int &deep) {
+void printTree(const shared_ptr<Node> &node, const int &deep = 0) {
   for (int i = 0; i < deep; ++i) {
     cout << " ";
   }
@@ -241,8 +348,24 @@ TEST_CASE("parse") {
 }
 
 TEST_CASE("eval") {
-  auto tokens = tokenize("1");
-  auto tree = parse(tokens);
+  Env::Ptr env = standardEnv();
+
+  unordered_map<string, double> testcases {
+    {"(+ 1 2)", 3},
+    {"(- 1 2)", -1},
+    {"(* 3 2)", 6},
+    {"(/ 6 2)", 3},
+    {"(/ (+ 4 (+ 4 (* 2 (- 10 8)))) (* 2 3))", 2}
+  };
+
+  for (auto kv : testcases) {
+    auto tokens = tokenize(kv.first);
+    auto tree = parse(tokens);
+    auto result = eval(tree, env);
+    auto val = static_cast<const Number*>(result.get());
+    REQUIRE(val->value == kv.second);
+  }
+
 }
 
 
