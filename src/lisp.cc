@@ -52,16 +52,19 @@ public:
 
 class Boolean : public Node {
 public:
-  Boolean() {
+  bool value;
+  Boolean(bool v) : value(v) {
     type = NodeType::boolean;
   }
-public:
+  explicit operator bool() const {
+    return value;
+  }
   static const Node::Ptr True;
   static const Node::Ptr False;
 };
 
-const Node::Ptr Boolean::True = make_shared<Boolean>();
-const Node::Ptr Boolean::False = make_shared<Boolean>();
+const Node::Ptr Boolean::True = make_shared<Boolean>(true);
+const Node::Ptr Boolean::False = make_shared<Boolean>(false);
 
 class Func : public Node {
 public:
@@ -69,65 +72,35 @@ public:
     type = NodeType::func;
   }
   virtual ~Func() {}
-  virtual Node::Ptr call(vector<Node::Ptr> args) = 0;
+  virtual Node::Ptr call(const vector<Node::Ptr> &args) = 0;
 };
 
-// class Op : public Node {
-// public:
-//   typedef function<Node::Ptr(const vector<Node::Ptr>&)> FuncType;
-// private:
-//   FuncType func_;
-// public:
-//   Op(FuncType f) : func_(f) {}
-//   Node::Ptr call(const vector<Node::Ptr> &args) {
-//     return func_(args);
-//   }
-// };
-
-// template<typename T>
-// Node::Ptr Add1(const vector<Node::Ptr> &args) {
-//   return nullptr;
-// }
-
-// template<typename T>
-// Node::Ptr Add1(const vector<Node::Ptr> &args) {
-//   return nullptr;
-// }
-
-class Add : public Func {
+class Arithmetic : public Func {
 public:
-  Node::Ptr call(vector<Node::Ptr> args) override {
-    auto l = static_cast<const Number*>(args[0].get())->value;
-    auto r = static_cast<const Number*>(args[1].get())->value;
-    return make_shared<Number>(l + r);
+  typedef function<double(double, double)> Handler;
+  Arithmetic(Handler h) : handler_(h) {}
+  Node::Ptr call(const vector<Node::Ptr> &args) override {
+    double state = static_pointer_cast<Number>(args[0])->value;
+    for (auto it = args.begin() + 1; it != args.end(); ++it) {
+      state = handler_(state, static_pointer_cast<Number>(*it)->value);
+    }
+    return make_shared<Number>(state);
   }
+private:
+  Handler handler_;
 };
 
-class Subtract : public Func {
+class Comparison : public Func {
 public:
-  Node::Ptr call(vector<Node::Ptr> args) override {
-    auto l = static_cast<const Number*>(args[0].get())->value;
-    auto r = static_cast<const Number*>(args[1].get())->value;
-    return make_shared<Number>(l - r);
+  typedef function<bool(double, double)> Handler;
+  Comparison(Handler h) : handler_(h) {}
+  Node::Ptr call(const vector<Node::Ptr> &args) override {
+    auto l = static_pointer_cast<Number>(args[0])->value;
+    auto r = static_pointer_cast<Number>(args[1])->value;
+    return handler_(l, r) ? Boolean::True : Boolean::False;
   }
-};
-
-class Multiply : public Func {
-public:
-  Node::Ptr call(vector<Node::Ptr> args) override {
-    auto l = static_cast<const Number*>(args[0].get())->value;
-    auto r = static_cast<const Number*>(args[1].get())->value;
-    return make_shared<Number>(l * r);
-  }
-};
-
-class Divide : public Func {
-public:
-  Node::Ptr call(vector<Node::Ptr> args) override {
-    auto l = static_cast<const Number*>(args[0].get())->value;
-    auto r = static_cast<const Number*>(args[1].get())->value;
-    return make_shared<Number>(l / r);
-  }
+private:
+  Handler handler_;
 };
 
 class Env {
@@ -162,10 +135,18 @@ public:
 
 Env::Ptr standardEnv() {
   Env::Ptr env = make_shared<Env>();
-  env->Emplace("+", make_shared<Add>());
-  env->Emplace("-", make_shared<Subtract>());
-  env->Emplace("*", make_shared<Multiply>());
-  env->Emplace("/", make_shared<Divide>());
+  env->Emplace("+", make_shared<Arithmetic>([](auto state, auto number) { return state + number; }));
+  env->Emplace("-", make_shared<Arithmetic>([](auto state, auto number) { return state - number; }));
+  env->Emplace("*", make_shared<Arithmetic>([](auto state, auto number) { return state * number; }));
+  env->Emplace("/", make_shared<Arithmetic>([](auto state, auto number) { return state / number; }));
+  
+  env->Emplace(">", make_shared<Comparison>([](auto l, auto r) { return l > r; }));
+  env->Emplace("<", make_shared<Comparison>([](auto l, auto r) { return l < r; }));
+  env->Emplace("==", make_shared<Comparison>([](auto l, auto r) { return l == r; }));
+  env->Emplace("!=", make_shared<Comparison>([](auto l, auto r) { return l != r; }));
+  env->Emplace(">=", make_shared<Comparison>([](auto l, auto r) { return l >= r; }));
+  env->Emplace("<=", make_shared<Comparison>([](auto l, auto r) { return l <= r; }));
+
   return env;
 }
 
@@ -292,6 +273,12 @@ shared_ptr<Node> parse(queue<string> &tokens) {
   }
 }
 
+auto execute = [](string program, Env::Ptr env) {
+  auto tokens = tokenize(program);
+  auto tree = parse(tokens);
+  return eval(tree, env);
+};
+
 
 void printTree(const shared_ptr<Node> &node, const int &deep = 0) {
   for (int i = 0; i < deep; ++i) {
@@ -347,24 +334,71 @@ TEST_CASE("parse") {
   printTree(tree, 0);
 }
 
-TEST_CASE("eval") {
+TEST_CASE("arithmetic") {
   Env::Ptr env = standardEnv();
 
-  unordered_map<string, double> testcases {
+  unordered_map<string, double> test_arithmetic {
     {"(+ 1 2)", 3},
+    {"(+ 1 2 3 4 5)", 1 + 2 + 3 + 4 + 5},
     {"(- 1 2)", -1},
+    {"(- 1 2 3 4 5)", 1 - 2 - 3 - 4 - 5},
     {"(* 3 2)", 6},
+    {"(* 1 2 3 4 5)", 1 * 2 * 3 * 4 * 5},
     {"(/ 6 2)", 3},
+    {"(/ 1 2 3 4 5)", 1.0 / 2 / 3 / 4 / 5},
     {"(/ (+ 4 (+ 4 (* 2 (- 10 8)))) (* 2 3))", 2}
   };
 
-  for (auto kv : testcases) {
-    auto tokens = tokenize(kv.first);
-    auto tree = parse(tokens);
-    auto result = eval(tree, env);
-    auto val = static_cast<const Number*>(result.get());
+  for (auto kv : test_arithmetic) {
+    auto result = execute(program, env);
+    auto val = static_pointer_cast<Number>(result);
     REQUIRE(val->value == kv.second);
   }
+}
+
+
+TEST_CASE("comparsion") {
+  Env::Ptr env = standardEnv();
+
+  unordered_map<string, bool> test_comparison {
+    {"(> 1 2)", false},
+    {"(< 1 2)", true},
+    {"(== 2 2)", true},
+    {"(== 21 2)", false},
+    {"(!= 21 2)", true},
+    {"(>= 1 2)", false},
+    {"(<= 1 2)", true},
+  };
+
+  for (auto kv : test_comparison) {
+    auto result = execute(program, env);
+    auto val = static_pointer_cast<Boolean>(result);
+    REQUIRE(val->value == kv.second);
+  }
+}
+
+TEST_CASE("condition") {
+  Env::Ptr env = standardEnv();
+
+  unordered_map<string, bool> test_comparison {
+    {"(if (< 1 2) 1 2)", false},
+    {"(< 1 2)", true},
+    {"(== 2 2)", true},
+    {"(== 21 2)", false},
+    {"(!= 21 2)", true},
+    {"(>= 1 2)", false},
+    {"(<= 1 2)", true},
+  };
+
+  auto testNumber = [&env](string program, double expect) {
+    auto result = execute(program, env);
+    REQUIRE(result->type == NodeType::number);
+    auto number = static_pointer_cast<Number>(result);
+    REQUIRE(number->value == expect);
+  };
+
+  testNumber("(if (< 1 2) 1 2)", 1);
+  testNumber("(if (> 1 2) 1 2)", 2);
 
 }
 
