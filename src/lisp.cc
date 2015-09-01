@@ -431,8 +431,11 @@ TEST_CASE("procedure") {
   testNumber("pi", 3.14);
 
   execute("(define circle-area (lambda (r) (* pi (* r r))))", env);
-
   testNumber("(circle-area 3)", 28.26);
+
+  execute("(define fact (lambda (n) (if (<= n 1) 1 (* n (fact (- n 1))))))", env);
+  testNumber("(fact 10)", 3628800);
+  testNumber("(circle-area (fact 10))", 41348114841600.0);
 
 }
 
