@@ -444,6 +444,16 @@ TEST_CASE("procedure") {
   testNumber("(fact 10)", 3628800);
   testNumber("(circle-area (fact 10))", 41348114841600.0);
 
+  execute("(define count-down-from (lambda (n) (lambda () (set! n (- n 1)))))", env);
+  execute("(define count-down-from-3 (count-down-from 3))", env);
+  execute("(define count-down-from-4 (count-down-from 4))", env);
+  testNumber("(count-down-from-3)", 2);
+  testNumber("(count-down-from-4)", 3);
+  testNumber("(count-down-from-3)", 1);
+  testNumber("(count-down-from-3)", 0);
+  testNumber("(count-down-from-4)", 2);
+  testNumber("(count-down-from-4)", 1);
+  testNumber("(count-down-from-4)", 0);
 }
 
 
