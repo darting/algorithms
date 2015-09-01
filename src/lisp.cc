@@ -153,22 +153,23 @@ Env::Ptr standardEnv() {
 
 Node::Ptr eval(Node::Ptr x, Env::Ptr env);
 
-class Procedure : public Node {
+class Procedure : public Func {
 private:
-  vector<Node::Ptr> parms_;
+  Node::Ptr parms_;
   Node::Ptr body_;
   Env::Ptr env_;
 public:
-  Procedure(const vector<Node::Ptr> &parms, Node::Ptr body, Env::Ptr env)
+  Procedure(Node::Ptr parms, Node::Ptr body, Env::Ptr env)
   : parms_(parms),
     body_(body),
     env_(env) {
       type = NodeType::procedure;
     }
-  Node::Ptr call(vector<Node::Ptr> args) {
+  Node::Ptr call(const vector<Node::Ptr> &args) override {
     Env::Ptr env = make_shared<Env>(env_);
-    for (size_t i = 0; i < parms_.size(); ++i) {
-      auto k = static_cast<const Symbol*>(parms_[i].get())->value;
+    auto parms = static_pointer_cast<List>(parms_)->children;
+    for (size_t i = 0; i < parms.size(); ++i) {
+      auto k = static_pointer_cast<Symbol>(parms[i])->value;
       env->Emplace(k, args[i]);
     }
     return eval(body_, env);
@@ -177,7 +178,7 @@ public:
 
 Node::Ptr eval(Node::Ptr x, Env::Ptr env) {
   if (x->type == NodeType::symbol) {
-    auto symbol = static_cast<const Symbol*>(x.get());
+    auto symbol = static_pointer_cast<Symbol>(x);
     return env->Find(symbol->value);
   } else if (x->type == NodeType::number) {
     return x;
@@ -191,22 +192,26 @@ Node::Ptr eval(Node::Ptr x, Env::Ptr env) {
     if (first->value == "quote") {
       return children[1];
     } else if (first->value == "if") {
+      // cout << "if >>> " << first->value << " : " << children.size() << endl;
       auto test = children[1];
       auto conseq = children[2];
       auto alt = children[3];
-      if (eval(test, env) == Boolean::True) {
+      auto cond = eval(test, env);
+      if (cond == Boolean::True) {
         return eval(conseq, env);
-      } else {
+      } else if (cond == Boolean::False) {
         return eval(alt, env);
       }
     } else if (first->value == "define") {
-      auto var = static_cast<const Symbol*>(children[1].get());
+      auto var = static_pointer_cast<Symbol>(children[1]);
       auto exp = children[2];
       env->Emplace(var->value, eval(exp, env));
     } else if (first->value == "set!") {
       // TODO
     } else if (first->value == "lambda") {
-      // TODO
+      auto parms = children[1];
+      auto body = children[2];
+      return make_shared<Procedure>(parms, body, env);
     } else {
       auto func = static_cast<Func*>(eval(children[0], env).get());
       vector<Node::Ptr> args;
@@ -215,8 +220,6 @@ Node::Ptr eval(Node::Ptr x, Env::Ptr env) {
       }
       return func->call(args);
     }
-  } else if (x->type == NodeType::procedure) {
-    // TODO
   }
   return x;
 }
@@ -233,7 +236,8 @@ queue<string> tokenize(string program) {
       auto end = it;
       while (*end != ' ' &&
              *end != '(' &&
-             *end != ')') {
+             *end != ')' &&
+             end != program.end()) {
         ++end;
       }
       tokens.push(string(it, end));
@@ -350,7 +354,7 @@ TEST_CASE("arithmetic") {
   };
 
   for (auto kv : test_arithmetic) {
-    auto result = execute(program, env);
+    auto result = execute(kv.first, env);
     auto val = static_pointer_cast<Number>(result);
     REQUIRE(val->value == kv.second);
   }
@@ -371,7 +375,7 @@ TEST_CASE("comparsion") {
   };
 
   for (auto kv : test_comparison) {
-    auto result = execute(program, env);
+    auto result = execute(kv.first, env);
     auto val = static_pointer_cast<Boolean>(result);
     REQUIRE(val->value == kv.second);
   }
@@ -399,6 +403,36 @@ TEST_CASE("condition") {
 
   testNumber("(if (< 1 2) 1 2)", 1);
   testNumber("(if (> 1 2) 1 2)", 2);
+
+}
+
+TEST_CASE("procedure") {
+
+  Env::Ptr env = standardEnv();
+
+  auto testNumber = [&env](string program, double expect) {
+    auto result = execute(program, env);
+    REQUIRE(result->type == NodeType::number);
+    auto number = static_pointer_cast<Number>(result);
+    REQUIRE(number->value == expect);
+  };
+
+  unordered_map<string, bool> testcase {
+    {"(if (< 1 2) 1 2)", false},
+    {"(< 1 2)", true},
+    {"(== 2 2)", true},
+    {"(== 21 2)", false},
+    {"(!= 21 2)", true},
+    {"(>= 1 2)", false},
+    {"(<= 1 2)", true},
+  };
+
+  execute("(define pi 3.14)", env);
+  testNumber("pi", 3.14);
+
+  execute("(define circle-area (lambda (r) (* pi (* r r))))", env);
+
+  testNumber("(circle-area 3)", 28.26);
 
 }
 
