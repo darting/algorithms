@@ -131,6 +131,14 @@ public:
   bool Emplace(const KeyType &key, ValueType node) {
     return values_.emplace(key, node).second;
   }
+
+  void Set(const KeyType &key, ValueType node) {
+    if (Find(key)) {
+      values_.emplace(key, node);
+    } else if(outer_) {
+      outer_->Set(key, node);
+    }
+  }
 };
 
 Env::Ptr standardEnv() {
@@ -192,7 +200,6 @@ Node::Ptr eval(Node::Ptr x, Env::Ptr env) {
     if (first->value == "quote") {
       return children[1];
     } else if (first->value == "if") {
-      // cout << "if >>> " << first->value << " : " << children.size() << endl;
       auto test = children[1];
       auto conseq = children[2];
       auto alt = children[3];
@@ -207,7 +214,9 @@ Node::Ptr eval(Node::Ptr x, Env::Ptr env) {
       auto exp = children[2];
       env->Emplace(var->value, eval(exp, env));
     } else if (first->value == "set!") {
-      // TODO
+      auto var = static_pointer_cast<Symbol>(children[1]);
+      auto exp = children[2];
+      env->Set(var->value, eval(exp, env));
     } else if (first->value == "lambda") {
       auto parms = children[1];
       auto body = children[2];
@@ -310,16 +319,14 @@ void printTree(const shared_ptr<Node> &node, const int &deep = 0) {
 
 
 
-string program1 = R"(
-    (if (> (val x) 0)
-       (fn (+ (aref A i) 1)
-        (quote (one two))))
-    )";
-
 
 TEST_CASE("tokenize") {
 
-  auto tokens = tokenize(program1);
+  auto tokens = tokenize(R"(
+    (if (> (val x) 0)
+       (fn (+ (aref A i) 1)
+        (quote (one two))))
+    )");
 
   vector<string> expect { "(", "if", "(", ">", "(", "val", "x", ")", "0", ")", "(", "fn", "(", "+", 
                           "(", "aref", "A", "i", ")", "1", ")", "(", "quote", "(", "one", "two", ")", 
@@ -332,7 +339,7 @@ TEST_CASE("tokenize") {
 
 TEST_CASE("parse") {
 
-  auto tokens = tokenize(program1);
+  auto tokens = tokenize("(define fact (lambda (n) (if (<= n 1) 1 (* n (fact (- n 1))))))");
   auto tree = parse(tokens);
 
   printTree(tree, 0);
