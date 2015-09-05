@@ -55,7 +55,10 @@ public:
     type = NodeType::list;
   }
   string TypeName() override { return "list"; }
+  static const Node::Ptr Nil;
 };
+
+const Node::Ptr List::Nil = make_shared<List>();
 
 class Boolean : public Node {
 public:
@@ -73,6 +76,7 @@ public:
 
 const Node::Ptr Boolean::True = make_shared<Boolean>(true);
 const Node::Ptr Boolean::False = make_shared<Boolean>(false);
+
 
 class Func : public Node {
 public:
@@ -125,7 +129,7 @@ private:
   ValuesType values_;
 
 public:
-  Env(Ptr outer = nullptr) : outer_(outer) {}
+  explicit Env(Ptr outer = nullptr) : outer_(outer) {}
   
   ValueType Find(const KeyType &key) const {
     auto it = values_.find(key);
@@ -138,13 +142,21 @@ public:
     }
     return it->second;
   }
+
+  bool Contains(const KeyType &key) const {
+    auto it = values_.find(key);
+    if (it == values_.end()) {
+      return false;
+    }
+    return true;
+  }
   
   bool Emplace(const KeyType &key, ValueType node) {
     return values_.emplace(key, node).second;
   }
 
   void Set(const KeyType &key, ValueType node) {
-    if (Find(key)) {
+    if (Contains(key)) {
       values_.emplace(key, node);
     } else if(outer_) {
       outer_->Set(key, node);
@@ -175,15 +187,16 @@ Node::Ptr eval(Node::Ptr x, Env::Ptr env);
 class Procedure : public Func {
 private:
   Node::Ptr parms_;
-  Node::Ptr body_;
+  vector<Node::Ptr> body_;
   Env::Ptr env_;
 public:
-  Procedure(Node::Ptr parms, Node::Ptr body, Env::Ptr env)
+  Procedure(Node::Ptr parms, vector<Node::Ptr> body, Env::Ptr env)
   : parms_(parms),
     body_(body),
     env_(env) {
       type = NodeType::procedure;
     }
+  string TypeName() override { return "func-procedure"; }
   Node::Ptr call(const vector<Node::Ptr> &args) override {
     Env::Ptr env = make_shared<Env>(env_);
     auto parms = static_pointer_cast<List>(parms_)->children;
@@ -191,7 +204,11 @@ public:
       auto k = static_pointer_cast<Symbol>(parms[i])->value;
       env->Emplace(k, args[i]);
     }
-    return eval(body_, env);
+    Node::Ptr result;
+    for (auto b : body_) {
+      result = eval(b, env);
+    }
+    return result;
   }
 };
 
@@ -224,13 +241,15 @@ Node::Ptr eval(Node::Ptr x, Env::Ptr env) {
       auto var = static_pointer_cast<Symbol>(children[1]);
       auto exp = children[2];
       env->Emplace(var->value, eval(exp, env));
+      return List::Nil;
     } else if (first->value == "set!") {
       auto var = static_pointer_cast<Symbol>(children[1]);
       auto exp = children[2];
       env->Set(var->value, eval(exp, env));
+      return List::Nil;
     } else if (first->value == "lambda") {
       auto parms = children[1];
-      auto body = children[2];
+      vector<Node::Ptr> body(children.begin() + 2, children.end());
       return make_shared<Procedure>(parms, body, env);
     } else {
       auto func = static_pointer_cast<Func>(eval(children[0], env));
@@ -240,6 +259,9 @@ Node::Ptr eval(Node::Ptr x, Env::Ptr env) {
       }
       return func->call(args);
     }
+  } else if (x->type == NodeType::procedure) {
+    auto proc = static_pointer_cast<Procedure>(x);
+    return eval(proc->call({}), env);
   }
   return x;
 }
@@ -303,6 +325,9 @@ auto execute = [](string program, Env::Ptr env) {
   return eval(tree, env);
 };
 
+//
+// ====== test helper ======================
+//
 
 void printTree(const shared_ptr<Node> &node, const int &deep = 0) {
   for (int i = 0; i < deep; ++i) {
@@ -327,8 +352,25 @@ void printTree(const shared_ptr<Node> &node, const int &deep = 0) {
   }
 }
 
+auto shouldBe = [](Env::Ptr env, string program, double expect) {
+  auto result = execute(program, env);
+  if (result->type != NodeType::number) {
+    printTree(result);
+    stringstream ss;
+    ss << "type of result is not NodeType::number :\n" 
+       << "expression > " << program << "\n"
+       << "type       > " << result->TypeName() << "\n"
+       << "expect     > " << expect;
+    FAIL(ss.str());
+  }
+  auto number = static_pointer_cast<Number>(result);
+  CHECK(number->value == expect);
+};
 
 
+//
+// ====== test cases ======================
+//
 
 
 TEST_CASE("tokenize") {
@@ -399,21 +441,6 @@ TEST_CASE("comparsion") {
   }
 }
 
-auto shouldBe = [](Env::Ptr &env, string program, double expect) {
-  auto result = execute(program, env);
-  if (result->type != NodeType::number) {
-    printTree(result);
-    stringstream ss;
-    ss << "type of result is not NodeType::number :\n" 
-       << "expression > " << program << "\n"
-       << "type       > " << result->TypeName() << "\n"
-       << "expect     > " << expect;
-    FAIL(ss.str());
-  }
-  auto number = static_pointer_cast<Number>(result);
-  CHECK(number->value == expect);
-};
-
 TEST_CASE("condition") {
   Env::Ptr env = standardEnv();
 
@@ -431,16 +458,6 @@ TEST_CASE("procedure") {
 
   Env::Ptr env = standardEnv();
 
-  unordered_map<string, bool> testcase {
-    {"(if (< 1 2) 1 2)", false},
-    {"(< 1 2)", true},
-    {"(== 2 2)", true},
-    {"(== 21 2)", false},
-    {"(!= 21 2)", true},
-    {"(>= 1 2)", false},
-    {"(<= 1 2)", true},
-  };
-
   execute("(define pi 3.14)", env);
   shouldBe(env, "pi", 3.14);
 
@@ -451,18 +468,44 @@ TEST_CASE("procedure") {
   shouldBe(env, "(fact 10)", 3628800);
   shouldBe(env, "(circle-area (fact 10))", 41348114841600.0);
 
-  execute("(define count-down-from (lambda (n) (lambda () (set! n (- n 1)))))", env);
-  execute("(define count-down-from-3 (count-down-from 3))", env);
+  // (define count-down-from 
+  //   (lambda (n) 
+  //     (lambda () 
+  //       (set! n (- n 1))
+  //       n
+  // )))
+
+  // execute("(define count-down-from (lambda (n) (lambda () (set! n (- n 1)) n )))", env);
+  // execute("(define count-down-from (lambda (n) (lambda () n ) ))", env);
+
+  // execute("(define count-down-from-3 (count-down-from 3))", env);
   // execute("(define count-down-from-4 (count-down-from 4))", env);
-  shouldBe(env, "(count-down-from-3)", 2);
-  // shouldBe("(count-down-from-4)", 3);
-  // shouldBe("(count-down-from-3)", 1);
+  
+  // shouldBe(env, "(count-down-from-3)", 2);
+  
+  // shouldBe(env, "(count-down-from-4)", 3);
+  // shouldBe(env, "(count-down-from-3)", 1);
   // shouldBe("(count-down-from-3)", 0);
   // shouldBe("(count-down-from-4)", 2);
   // shouldBe("(count-down-from-4)", 1);
   // shouldBe("(count-down-from-4)", 0);
 }
 
+TEST_CASE("closure") {
+  Env::Ptr env = standardEnv();
+  execute("(define count-down-from (lambda (n) (lambda () (set! n (- n 1)) n )))", env);
+  execute("(define count-down-from-3 (count-down-from 3))", env);
+  execute("(define count-down-from-4 (count-down-from 4))", env);
+
+  shouldBe(env, "(count-down-from-3)", 2);
+  
+  // shouldBe(env, "(count-down-from-4)", 3);
+  // shouldBe(env, "(count-down-from-3)", 1);
+  // shouldBe(env, "(count-down-from-3)", 0);
+  // shouldBe(env, "(count-down-from-4)", 2);
+  // shouldBe(env, "(count-down-from-4)", 1);
+  // shouldBe(env, "(count-down-from-4)", 0);
+}
 
 
 
