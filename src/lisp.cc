@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <stdexcept>
 #include <functional>
+#include <sstream>
 
 #define CATCH_CONFIG_MAIN
 #include <catch.hpp>
@@ -20,10 +21,13 @@ enum class NodeType {
   func
 };
 
+
 class Node {
 public:
   typedef shared_ptr<Node> Ptr;
   NodeType type;
+  virtual ~Node() {}
+  virtual string TypeName() = 0;
 };
 
 class Number : public Node {
@@ -32,6 +36,7 @@ public:
   Number(const double &v) : value(v) {
     type = NodeType::number;
   }
+  string TypeName() override { return "number"; }
 };
 
 class Symbol : public Node {
@@ -40,6 +45,7 @@ public:
   Symbol(const string &s) : value(s) {
     type = NodeType::symbol;
   }
+  string TypeName() override { return "symbol"; }
 };
 
 class List : public Node {
@@ -48,6 +54,7 @@ public:
   List() {
     type = NodeType::list;
   }
+  string TypeName() override { return "list"; }
 };
 
 class Boolean : public Node {
@@ -56,6 +63,7 @@ public:
   Boolean(bool v) : value(v) {
     type = NodeType::boolean;
   }
+  string TypeName() override { return "boolean"; }
   explicit operator bool() const {
     return value;
   }
@@ -71,6 +79,7 @@ public:
   Func() {
     type = NodeType::func;
   }
+  string TypeName() override { return "fun"; }
   virtual ~Func() {}
   virtual Node::Ptr call(const vector<Node::Ptr> &args) = 0;
 };
@@ -79,6 +88,7 @@ class Arithmetic : public Func {
 public:
   typedef function<double(double, double)> Handler;
   Arithmetic(Handler h) : handler_(h) {}
+  string TypeName() override { return "func-arithmetic"; }
   Node::Ptr call(const vector<Node::Ptr> &args) override {
     double state = static_pointer_cast<Number>(args[0])->value;
     for (auto it = args.begin() + 1; it != args.end(); ++it) {
@@ -94,6 +104,7 @@ class Comparison : public Func {
 public:
   typedef function<bool(double, double)> Handler;
   Comparison(Handler h) : handler_(h) {}
+  string TypeName() override { return "func-comparision"; }
   Node::Ptr call(const vector<Node::Ptr> &args) override {
     auto l = static_pointer_cast<Number>(args[0])->value;
     auto r = static_pointer_cast<Number>(args[1])->value;
@@ -300,19 +311,19 @@ void printTree(const shared_ptr<Node> &node, const int &deep = 0) {
   if (node->type == NodeType::list) {
     auto list = static_pointer_cast<List>(node);
     if (list->children.size() > 0) {
-      cout << "symbol: " << static_pointer_cast<Symbol>(list->children[0])->value << endl;
+      cout << list->TypeName() << ": " << static_pointer_cast<Symbol>(list->children[0])->value << endl;
       for (size_t i = 1; i < list->children.size(); ++i) {
         printTree(list->children[i], deep + 1);
       }
     } else {
-      cout << "list: Nil" << endl;
+      cout << list->TypeName() << ": Nil" << endl;
     }
   } else if (node->type == NodeType::number) {
     auto number = static_pointer_cast<Number>(node);
-    cout << "number: " << number->value << endl;
+    cout << number->TypeName() << ": " << number->value << endl;
   } else if (node->type == NodeType::symbol) {
     auto symbol = static_pointer_cast<Symbol>(node);
-    cout << "symbol: " << symbol->value << endl;
+    cout << symbol->TypeName() << ": " << symbol->value << endl;
   }
 }
 
@@ -388,45 +399,37 @@ TEST_CASE("comparsion") {
   }
 }
 
+auto shouldBe = [](Env::Ptr &env, string program, double expect) {
+  auto result = execute(program, env);
+  if (result->type != NodeType::number) {
+    printTree(result);
+    stringstream ss;
+    ss << "type of result is not NodeType::number :\n" 
+       << "expression > " << program << "\n"
+       << "type       > " << result->TypeName() << "\n"
+       << "expect     > " << expect;
+    FAIL(ss.str());
+  }
+  auto number = static_pointer_cast<Number>(result);
+  CHECK(number->value == expect);
+};
+
 TEST_CASE("condition") {
   Env::Ptr env = standardEnv();
 
-  unordered_map<string, bool> test_comparison {
-    {"(if (< 1 2) 1 2)", false},
-    {"(< 1 2)", true},
-    {"(== 2 2)", true},
-    {"(== 21 2)", false},
-    {"(!= 21 2)", true},
-    {"(>= 1 2)", false},
-    {"(<= 1 2)", true},
-  };
-
-  auto testNumber = [&env](string program, double expect) {
-    auto result = execute(program, env);
-    REQUIRE(result->type == NodeType::number);
-    auto number = static_pointer_cast<Number>(result);
-    REQUIRE(number->value == expect);
-  };
-
-  testNumber("(if (< 1 2) 1 2)", 1);
-  testNumber("(if (> 1 2) 1 2)", 2);
-
+  shouldBe(env, "(if (< 1 2) 1 2)", 1);
+  shouldBe(env, "(if (> 1 2) 1 2)", 2);
 }
+
+TEST_CASE("lambda") {
+  Env::Ptr env = standardEnv();
+  execute("(define add (lambda (x y) (+ x y)))", env);
+
+};
 
 TEST_CASE("procedure") {
 
   Env::Ptr env = standardEnv();
-
-  auto testNumber = [&env](string program, double expect) {
-    auto result = execute(program, env);
-    CHECK(result->type == NodeType::number);
-    if (result->type != NodeType::number) {
-      printTree(result);
-      FAIL("type of result is not NodeType::number");
-    }
-    auto number = static_pointer_cast<Number>(result);
-    CHECK(number->value == expect);
-  };
 
   unordered_map<string, bool> testcase {
     {"(if (< 1 2) 1 2)", false},
@@ -439,25 +442,25 @@ TEST_CASE("procedure") {
   };
 
   execute("(define pi 3.14)", env);
-  testNumber("pi", 3.14);
+  shouldBe(env, "pi", 3.14);
 
   execute("(define circle-area (lambda (r) (* pi (* r r))))", env);
-  testNumber("(circle-area 3)", 28.26);
+  shouldBe(env, "(circle-area 3)", 28.26);
 
   execute("(define fact (lambda (n) (if (<= n 1) 1 (* n (fact (- n 1))))))", env);
-  testNumber("(fact 10)", 3628800);
-  testNumber("(circle-area (fact 10))", 41348114841600.0);
+  shouldBe(env, "(fact 10)", 3628800);
+  shouldBe(env, "(circle-area (fact 10))", 41348114841600.0);
 
   execute("(define count-down-from (lambda (n) (lambda () (set! n (- n 1)))))", env);
   execute("(define count-down-from-3 (count-down-from 3))", env);
   // execute("(define count-down-from-4 (count-down-from 4))", env);
-  // testNumber("(count-down-from-3)", 2);
-  // testNumber("(count-down-from-4)", 3);
-  // testNumber("(count-down-from-3)", 1);
-  // testNumber("(count-down-from-3)", 0);
-  // testNumber("(count-down-from-4)", 2);
-  // testNumber("(count-down-from-4)", 1);
-  // testNumber("(count-down-from-4)", 0);
+  shouldBe(env, "(count-down-from-3)", 2);
+  // shouldBe("(count-down-from-4)", 3);
+  // shouldBe("(count-down-from-3)", 1);
+  // shouldBe("(count-down-from-3)", 0);
+  // shouldBe("(count-down-from-4)", 2);
+  // shouldBe("(count-down-from-4)", 1);
+  // shouldBe("(count-down-from-4)", 0);
 }
 
 
